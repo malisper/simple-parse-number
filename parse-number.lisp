@@ -12,7 +12,7 @@
 		     (invalid-number-value c)
                      (invalid-number-reason c)))))
 
-(defun invalid-number (string reason)
+(defun invalid (string reason)
   "Given a string for a value and a reason, signal an 'invalid-number'
    error with the given arguments."
   (error 'invalid-number :value string :reason reason))
@@ -27,7 +27,7 @@
 	     (if (not (and pos-left pos-right (< pos-left pos-right)
 			   (eql (count #\( string) 1)
 			   (eql (count #\) string) 1)))
-		 (invalid-number string "Mismatched parenthesis")
+		 (invalid string "Mismatched parenthesis")
 		 (let* ((starting-left (position-if-not #'whitespace-p string :start (+ pos-left 1)))
 			(delimiting-left (position-if #'whitespace-p string :start starting-left))
 			(starting-right (position-if-not #'whitespace-p string :end pos-right :from-end t))
@@ -39,7 +39,7 @@
 
 (defun parse-trimmed-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
-  (macrolet ((err (reason) `(invalid-number string ,reason)))
+  (macrolet ((err (reason) `(invalid string ,reason)))
     (let ((first-char (char string 0))
           (last-char  (char string (- (length string) 1))))
       (cond ((eql (length string) 0)
@@ -62,13 +62,17 @@
              (err "Multiple /'s in number"))
             ((>= (count #\. string) 2)
              (err "Multiple .'s in number"))
-            ((>= (count-if #'exponent-marker-p string)
+            ((>= (count-if (lambda (c)
+			     (exponent-marker-p c radix))
+			   string)
                  2)
              (err "Multiple exponent markers in number"))
             (:else
              (let ((.-pos (position #\. string))
                    (/-pos (position #\/ string))
-                   (exp-pos (position-if #'exponent-marker-p string)))
+                   (exp-pos (position-if (lambda (c)
+					   (exponent-marker-p c radix))
+					 string)))
                (cond ((and (/= radix 10) (or exp-pos .-pos))
                       (err (format nil
                                    "Only decimal numbers can contain ~:[~
@@ -190,14 +194,20 @@
 (defun make-exp-whole-float (radix marker whole exponent)
   "Make an float where MARKER is the exponent-marker, WHOLE is the whole
    part and EXPONENT is the exponent."
-  (make-exp-float radix marker whole *zero* exponent))
+  (declare (ignore radix))
+  (* (value whole)
+     (expt (base-for-exponent-marker marker)
+	   (value exponent))))
 
 (defun make-exp-float (radix marker whole frac exponent)
   "Build a float whose whole part is WHOLE, fractional part is FRAC,
    and exponent is EXPONENT. MARKER is the exponent-marker of the float."
-  (* (expt (base-for-exponent-marker marker) (value exponent))
-     (+ (value whole)
-        (/ (value frac) (expt radix (num-digits frac))))))
+  (let* ((base (base-for-exponent-marker marker))
+	 (exp (expt base (value exponent))))
+    (+ (* exp (value whole))
+       (/ (* exp (value frac))
+	  (expt (float radix base)
+		(num-digits frac))))))
 
 (defparameter *reader-macro-vals*
   '((#\B 2) (#\O 8) (#\X 16))
