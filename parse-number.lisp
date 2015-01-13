@@ -37,6 +37,11 @@
 		    (parse-real-number string :start delimiting-right :end (+ starting-right 1) :radix radix))))))
       (parse-real-number string :radix radix)))
 
+(defparameter *reader-macro-vals*
+  '((#\B 2) (#\O 8) (#\X 16))
+  "A list of all of the reader macro characters and their
+   corresponding values.")
+
 (defun parse-trimmed-real-number (string radix)
   "Parse a real number from a trimmed string. Handle all of the
    possible reader macros as well as the minus sign."
@@ -47,12 +52,11 @@
 		 ((digit-char-p (char string 1))
 		  (let ((r-pos (position #\R string :key #'char-upcase)))
 		    (if (not r-pos)
-			(invalid-number string "Missing R in #radixR")
+			(invalid string "Missing R in #radixR")
 			(parse-real-number (subseq string (+ r-pos 1))
 			  :radix (parse-trimmed-positive-real-number
 				   (subseq string 1 r-pos) 10)))))
-		 (:else (invalid-number
-			  string
+		 (:else (invalid string
 			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
     (otherwise (parse-trimmed-positive-real-number string radix))))
 
@@ -174,8 +178,8 @@
    number of digits. This is useful for reprsenting decimal values."
   num-digits value)
 
-(defparameter *zero* (make-parsed-integer 0 0)
-  "The zero parsed integer.")
+(defparameter *empty* (make-parsed-integer 0 0)
+  "The empty parsed integer.")
 
 (defun split-and-parse (string radix &rest points)
   "Given a string of integers and a list of locations in beteween
@@ -185,7 +189,7 @@
         for (prev maybe-next) on (cons -1 points)
         for next = (or maybe-next len)
         collect (if (eql (+ prev 1) next) ; If the string would be
-                    *zero*                ; empty, return zero instead.
+                    *empty*               ; empty, use the empty pi.
                     (let ((str (subseq string (+ prev 1) next)))
                       (make-parsed-integer (parse-integer str :radix radix)
                                            (length str))))))
@@ -225,15 +229,12 @@
    and exponent is EXPONENT. MARKER is the exponent-marker of the float."
   (let* ((base (base-for-exponent-marker marker))
 	 (exp (expt base (value exponent))))
+    ;; It is impossible to factor out the exp because that would
+    ;; lead to rounding errors with floats.
     (+ (* exp (value whole))
        (/ (* exp (value frac))
 	  (expt (float radix base)
 		(num-digits frac))))))
-
-(defparameter *reader-macro-vals*
-  '((#\B 2) (#\O 8) (#\X 16))
-  "A list of all of the reader macro characters and their
-   corresponding values.")
 
 (defmacro deftrimmer (trimmer regular)
   "Define a function, TRIMMER, which will take in a string and will
