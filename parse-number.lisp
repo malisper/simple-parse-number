@@ -203,19 +203,39 @@
    possible reader macros as well as the minus sign."
   (case (char string 0)
     (#\- (- (parse-trimmed-positive-real-number (subseq string 1) radix)))
-    (#\# (let ((pair (assoc (char string 1) *reader-macro-vals*)))
-	   (cond (pair (parse-trimmed-real-number (subseq string 1)
-						  (cadr pair)))
+    (#\# (let ((pair (assoc (char-upcase (char string 1)) *reader-macro-vals*)))
+	   (cond (pair (parse-real-number (subseq string 2) :radix (cadr pair)))
 		 ((digit-char-p (char string 1))
 		  (let ((r-pos (position #\R string :key #'char-upcase)))
 		    (if (not r-pos)
 			(invalid-number string "Missing R in #radixR")
-			(parse-trimmed-real-number
-			  (subseq string (+ r-pos 1))
-			  (subseq string 1 r-pos)))))
+			(parse-real-number (subseq string (+ r-pos 1))
+			  :radix (parse-trimmed-positive-real-number
+				   (subseq string 1 r-pos) 10)))))
 		 (:else (invalid-number
 			  string
 			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
     (otherwise (parse-trimmed-positive-real-number string radix))))
 
-(deftrimmer parse-real-number parse-trimmed-positive-real-number)
+(deftrimmer parse-real-number parse-trimmed-real-number)
+
+(defun parse-trimmed-number (string radix)
+  "Parse any number out of a string that has been trimmed."
+  (or (and (eql (char string 0) #\#)
+	   (eql (char string 1) #\C)
+	   (eql (count #\( string) 1)
+	   (eql (count #\) string) 1)
+	   (let ((pos-left  (position #\( string))
+		 (pos-right (position #\) string)))
+	     (if (not (and pos-left pos-right (< pos-left pos-right)))
+		 (invalid-number string "Mismatched parenthesis")
+		 (let* ((starting-left (position-if-not #'whitespace-p string :start (+ pos-left 1)))
+			(delimiting-left (position-if #'whitespace-p string :start starting-left))
+			(starting-right (position-if-not #'whitespace-p string :end pos-right :from-end t))
+			(delimiting-right (position-if #'whitespace-p string :end starting-right :from-end t)))
+		   (complex
+		    (parse-real-number string :start starting-left :end delimiting-left :radix radix)
+		    (parse-real-number string :start delimiting-right :end (+ starting-right 1) :radix radix))))))
+      (parse-real-number string)))
+
+(deftrimmer parse-number parse-trimmed-number)
