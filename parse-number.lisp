@@ -1,12 +1,5 @@
 (in-package :simple-parse-number)
 
-(defstruct (parsed-integer (:conc-name nil)
-                           (:constructor make-parsed-integer
-                                         (value num-digits)))
-  "A parsed integer contains information on both the value and the
-   number of digits. This is useful for reprsenting decimal values."
-  num-digits value)
-
 (define-condition invalid-number (parse-error)
   ((value :reader invalid-number-value
 	  :initarg :value
@@ -19,50 +12,30 @@
 		     (invalid-number-value c)
                      (invalid-number-reason c)))))
 
-(defparameter *whitespace-characters*
-  '(#\space #\tab #\return #\newline)
-  "A list of whitespace characters.")
-
-(defparameter *exponent-markers*
-  '(#\D #\E #\L #\F #\S)
-  "A list of all of the exponent markers in uppercase.")
-
-(defparameter *zero* (make-parsed-integer 0 0)
-  "The zero parsed integer.")
-
-(defun digit-char-value (char)
-  "Returns the value of an alphabetical
-   character if it were to be used as a digit."
-  (+ 10
-     (- (char-code (char-upcase char))
-        (char-code #\A))))
-
-(defun exponent-markers (radix)
-  "Return a list of all of the valid exponent markers in the given
-   radix."
-  (remove-if-not (lambda (c)
-                   (>= (digit-char-value c)
-                       radix))
-                 *exponent-markers*))
-
-(defun exponent-marker-p (char &optional (radix 10))
-  "Is the given character an exponent marker in the given radix?"
-  (find (char-upcase char) (exponent-markers radix)))
-
-(defun whitespace-p (x)
-  "Is the given character a white space character?"
-  (find x *whitespace-characters*))
-
-(defun valid-p (char radix)
-  "Is the character valid in the given radix?"
-  (or (digit-char-p char radix)
-      (exponent-marker-p char radix)
-      (find char '(#\. #\/))))
-
 (defun invalid-number (string reason)
   "Given a string for a value and a reason, signal an 'invalid-number'
    error with the given arguments."
   (error 'invalid-number :value string :reason reason))
+
+(defun parse-trimmed-number (string radix)
+  "Parse any number out of a string that has been trimmed."
+  ;; This mostly handles complex numbers.
+  (or (and (eql (char string 0) #\#)
+	   (eql (char-upcase (char string 1)) #\C)
+	   (let ((pos-left  (position #\( string))
+		 (pos-right (position #\) string)))
+	     (if (not (and pos-left pos-right (< pos-left pos-right)
+			   (eql (count #\( string) 1)
+			   (eql (count #\) string) 1)))
+		 (invalid-number string "Mismatched parenthesis")
+		 (let* ((starting-left (position-if-not #'whitespace-p string :start (+ pos-left 1)))
+			(delimiting-left (position-if #'whitespace-p string :start starting-left))
+			(starting-right (position-if-not #'whitespace-p string :end pos-right :from-end t))
+			(delimiting-right (position-if #'whitespace-p string :end starting-right :from-end t)))
+		   (complex
+		    (parse-real-number string :start starting-left :end delimiting-left :radix radix)
+		    (parse-real-number string :start delimiting-right :end (+ starting-right 1) :radix radix))))))
+      (parse-real-number string :radix radix)))
 
 (defun parse-trimmed-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
@@ -126,6 +99,43 @@
                       (apply #'make-float (split-and-parse string radix .-pos)))
                      (:else (values (parse-integer string :radix radix))))))))))
 
+(defparameter *whitespace-characters*
+  '(#\space #\tab #\return #\newline)
+  "A list of whitespace characters.")
+
+(defun whitespace-p (x)
+  "Is the given character a white space character?"
+  (find x *whitespace-characters*))
+
+(defparameter *exponent-markers*
+  '(#\D #\E #\L #\F #\S)
+  "A list of all of the exponent markers in uppercase.")
+
+(defun exponent-markers (radix)
+  "Return a list of all of the valid exponent markers in the given
+   radix."
+  (remove-if-not (lambda (c)
+                   (>= (digit-char-value c)
+                       radix))
+                 *exponent-markers*))
+
+(defun exponent-marker-p (char &optional (radix 10))
+  "Is the given character an exponent marker in the given radix?"
+  (find (char-upcase char) (exponent-markers radix)))
+
+(defun valid-p (char radix)
+  "Is the character valid in the given radix?"
+  (or (digit-char-p char radix)
+      (exponent-marker-p char radix)
+      (find char '(#\. #\/))))
+
+(defun digit-char-value (char)
+  "Returns the value of an alphabetical
+   character if it were to be used as a digit."
+  (+ 10
+     (- (char-code (char-upcase char))
+        (char-code #\A))))
+
 (defun invalid-positive-real-number-first-char (char radix)
   "Is this character valid except at the start of a number?"
   (or (exponent-marker-p char radix) (find char '(#\. #\/))))
@@ -133,6 +143,16 @@
 (defun invalid-last-char (char radix)
   "Is this character valid except at the end of a number?"
   (or (exponent-marker-p char radix) (eql char #\/)))
+
+(defstruct (parsed-integer (:conc-name nil)
+                           (:constructor make-parsed-integer
+                                         (value num-digits)))
+  "A parsed integer contains information on both the value and the
+   number of digits. This is useful for reprsenting decimal values."
+  num-digits value)
+
+(defparameter *zero* (make-parsed-integer 0 0)
+  "The zero parsed integer.")
 
 (defun split-and-parse (string radix &rest points)
   "Given a string of integers and a list of locations in beteween
@@ -179,6 +199,11 @@
      (+ (value whole)
         (/ (value frac) (expt radix (num-digits frac))))))
 
+(defparameter *reader-macro-vals*
+  '((#\B 2) (#\O 8) (#\X 16))
+  "A list of all of the reader macro characters and their
+   corresponding values.")
+
 (defmacro deftrimmer (trimmer regular)
   "Define a function, TRIMMER, which will take in a string and will
    also accept several keyword arguments such as start, end, and
@@ -191,51 +216,6 @@
      (,regular (string-trim *whitespace-characters* (subseq string start end))
 	       radix)))
 
-(deftrimmer parse-positive-real-number parse-trimmed-positive-real-number)
-
-(defparameter *reader-macro-vals*
-  '((#\B 2) (#\O 8) (#\X 16))
-  "A list of all of the reader macro characters and their
-   corresponding values.")
-
-(defun parse-trimmed-real-number (string radix)
-  "Parse a real number from a trimmed string. Handle all of the
-   possible reader macros as well as the minus sign."
-  (case (char string 0)
-    (#\- (- (parse-trimmed-positive-real-number (subseq string 1) radix)))
-    (#\# (let ((pair (assoc (char-upcase (char string 1)) *reader-macro-vals*)))
-	   (cond (pair (parse-real-number (subseq string 2) :radix (cadr pair)))
-		 ((digit-char-p (char string 1))
-		  (let ((r-pos (position #\R string :key #'char-upcase)))
-		    (if (not r-pos)
-			(invalid-number string "Missing R in #radixR")
-			(parse-real-number (subseq string (+ r-pos 1))
-			  :radix (parse-trimmed-positive-real-number
-				   (subseq string 1 r-pos) 10)))))
-		 (:else (invalid-number
-			  string
-			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
-    (otherwise (parse-trimmed-positive-real-number string radix))))
-
-(deftrimmer parse-real-number parse-trimmed-real-number)
-
-(defun parse-trimmed-number (string radix)
-  "Parse any number out of a string that has been trimmed."
-  (or (and (eql (char string 0) #\#)
-	   (eql (char string 1) #\C)
-	   (eql (count #\( string) 1)
-	   (eql (count #\) string) 1)
-	   (let ((pos-left  (position #\( string))
-		 (pos-right (position #\) string)))
-	     (if (not (and pos-left pos-right (< pos-left pos-right)))
-		 (invalid-number string "Mismatched parenthesis")
-		 (let* ((starting-left (position-if-not #'whitespace-p string :start (+ pos-left 1)))
-			(delimiting-left (position-if #'whitespace-p string :start starting-left))
-			(starting-right (position-if-not #'whitespace-p string :end pos-right :from-end t))
-			(delimiting-right (position-if #'whitespace-p string :end starting-right :from-end t)))
-		   (complex
-		    (parse-real-number string :start starting-left :end delimiting-left :radix radix)
-		    (parse-real-number string :start delimiting-right :end (+ starting-right 1) :radix radix))))))
-      (parse-real-number string)))
-
 (deftrimmer parse-number parse-trimmed-number)
+(deftrimmer parse-real-number parse-trimmed-real-number)
+(deftrimmer parse-positive-real-number parse-trimmed-positive-real-number)
