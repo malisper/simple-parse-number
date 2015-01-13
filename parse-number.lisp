@@ -1,3 +1,5 @@
+(in-package :simple-parse-number)
+
 (defstruct (parsed-integer (:conc-name nil)
                            (:constructor make-parsed-integer
                                          (value num-digits)))
@@ -62,7 +64,7 @@
    error with the given arguments."
   (error 'invalid-number :value string :reason reason))
 
-(defun parse-trimmed-positive-real-number (string &key (radix 10))
+(defun parse-trimmed-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
   (macrolet ((err (reason) `(invalid-number string ,reason)))
     (let ((first-char (char string 0))
@@ -156,23 +158,64 @@
             (/ (value frac) (expt 10 (num-digits frac))))
          *read-default-float-format*))
 
-(defun base-for-exponent-marker (char)
+(defun base-for-exponent-marker (marker)
   "Return the base for an exponent-marker."
-  (case (char-upcase char)
+  (case (char-upcase marker)
     (#\D 10.0d0)
     (#\E (coerce 10 *read-default-float-format*))
     (#\F 10.0f0)
     (#\S 10.0s0)
     (#\L 10.0l0)))
 
-(defun make-exp-whole-float (radix char whole exponent)
-  "Make an float where CHAR is the exponent-marker, WHOLE is the whole
+(defun make-exp-whole-float (radix marker whole exponent)
+  "Make an float where MARKER is the exponent-marker, WHOLE is the whole
    part and EXPONENT is the exponent."
-  (make-exp-float radix char whole *zero* exponent))
+  (make-exp-float radix marker whole *zero* exponent))
 
-(defun make-exp-float (radix char whole frac exponent)
+(defun make-exp-float (radix marker whole frac exponent)
   "Build a float whose whole part is WHOLE, fractional part is FRAC,
-   and exponent is EXPONENT. CHAR is the exponent-marker of the float."
-  (* (expt (base-for-exponent-marker char) (value exponent))
+   and exponent is EXPONENT. MARKER is the exponent-marker of the float."
+  (* (expt (base-for-exponent-marker marker) (value exponent))
      (+ (value whole)
         (/ (value frac) (expt radix (num-digits frac))))))
+
+(defmacro deftrimmer (trimmer regular)
+  "Define a function, TRIMMER, which will take in a string and will
+   also accept several keyword arguments such as start, end, and
+   radix. It will then call REGULAR with a trimmed version of the
+   string and the radix."
+  `(defun ,trimmer (string &key (start 0) end (radix 10)
+			     ((:float-format *read-default-float-format*)
+			      *read-default-float-format*))
+     ,(format nil "Call ~A with the string after trimming it." regular)
+     (,regular (string-trim *whitespace-characters* (subseq string start end))
+	       radix)))
+
+(deftrimmer parse-positive-real-number parse-trimmed-positive-real-number)
+
+(defparameter *reader-macro-vals*
+  '((#\B 2) (#\O 8) (#\X 16))
+  "A list of all of the reader macro characters and their
+   corresponding values.")
+
+(defun parse-trimmed-real-number (string radix)
+  "Parse a real number from a trimmed string. Handle all of the
+   possible reader macros as well as the minus sign."
+  (case (char string 0)
+    (#\- (- (parse-trimmed-positive-real-number (subseq string 1) radix)))
+    (#\# (let ((pair (assoc (char string 1) *reader-macro-vals*)))
+	   (cond (pair (parse-trimmed-real-number (subseq string 1)
+						  (cadr pair)))
+		 ((digit-char-p (char string 1))
+		  (let ((r-pos (position #\R string :key #'char-upcase)))
+		    (if (not r-pos)
+			(invalid-number string "Missing R in #radixR")
+			(parse-trimmed-real-number
+			  (subseq string (+ r-pos 1))
+			  (subseq string 1 r-pos)))))
+		 (:else (invalid-number
+			  string
+			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
+    (otherwise (parse-trimmed-positive-real-number string radix))))
+
+(deftrimmer parse-real-number parse-trimmed-positive-real-number)
