@@ -37,6 +37,25 @@
 		    (parse-real-number string :start delimiting-right :end (+ starting-right 1) :radix radix))))))
       (parse-real-number string :radix radix)))
 
+(defun parse-trimmed-real-number (string radix)
+  "Parse a real number from a trimmed string. Handle all of the
+   possible reader macros as well as the minus sign."
+  (case (char string 0)
+    (#\- (- (parse-trimmed-positive-real-number (subseq string 1) radix)))
+    (#\# (let ((pair (assoc (char-upcase (char string 1)) *reader-macro-vals*)))
+	   (cond (pair (parse-real-number (subseq string 2) :radix (cadr pair)))
+		 ((digit-char-p (char string 1))
+		  (let ((r-pos (position #\R string :key #'char-upcase)))
+		    (if (not r-pos)
+			(invalid-number string "Missing R in #radixR")
+			(parse-real-number (subseq string (+ r-pos 1))
+			  :radix (parse-trimmed-positive-real-number
+				   (subseq string 1 r-pos) 10)))))
+		 (:else (invalid-number
+			  string
+			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
+    (otherwise (parse-trimmed-positive-real-number string radix))))
+
 (defun parse-trimmed-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
   (macrolet ((err (reason) `(invalid string ,reason)))
@@ -178,9 +197,11 @@
 (defun make-float (whole frac)
   "Make a float out of two parsed integers where X is the WHOLE is
    the whole part and FRACT is the fractional part."
-  (coerce (+ (value whole)
-            (/ (value frac) (expt 10 (num-digits frac))))
-         *read-default-float-format*))
+  (if (eql (num-digits frac) 0)
+      (value whole)
+      (coerce (+ (value whole)
+                 (/ (value frac) (expt 10 (num-digits frac))))
+              *read-default-float-format*)))
 
 (defun base-for-exponent-marker (marker)
   "Return the base for an exponent-marker."
