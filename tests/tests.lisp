@@ -34,7 +34,6 @@
   `(deftest ,name (invalid) (assert-invalid ,@args)))
 
 (defvalid-test integers "1" "-1" "1034" "3." "-3." "-364")
-
 (defvalid-test rationals "80/335" "1/2" "10/2")
 (defvalid-test floats "1.3214" "3.5333" "2.4E4" "6.8d3" "13.09s3" "35.66l5" "21.4f2")
 (defvalid-test radix "#xFF" "#b-1000" "#o-101/75" "#16rFF" "#9r10")
