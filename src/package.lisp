@@ -1,7 +1,8 @@
 (defpackage :simple-parse-number
   (:nicknames :spn)
   (:use :cl)
-  (:export :invalid-number-value
+  (:export :invalid-number
+           :invalid-number-value
 	   :invalid-number-reason
 	   :parse-positive-real-number
 	   :parse-real-number
