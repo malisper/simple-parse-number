@@ -17,7 +17,29 @@
    error with the given arguments."
   (error 'invalid-number :value string :reason reason))
 
-(defun parse-trimmed-number (string radix)
+(defparameter *whitespace-characters*
+  '(#\space #\tab #\return #\newline)
+  "A list of whitespace characters.")
+
+(defun whitespace-p (x)
+  "Is the given character a white space character?"
+  (find x *whitespace-characters*))
+
+(defmacro deftrimmer (regular trimmer args &body body)
+  "Define a function REGULAR which is a normal function with ARGS and
+   BODY. Also define a function, TRIMMER, which will take in a string
+   and will also accept several keyword arguments such as start, end,
+   and radix. It will then call REGULAR with a trimmed version of the
+   string and the radix."
+  `(progn (defun ,regular ,args ,@body)
+	  (defun ,trimmer (string &key (start 0) end (radix 10)
+				    ((:float-format *read-default-float-format*)
+				     *read-default-float-format*))
+	    ,(format nil "Call ~A with the string after trimming it." regular)
+	    (,regular (string-trim *whitespace-characters* (subseq string start end))
+		      radix))))
+
+(deftrimmer parse-trimmed-number parse-number (string radix)
   "Parse any number out of a string that has been trimmed."
   ;; This mostly handles complex numbers.
   (or (and (eql (char string 0) #\#)
@@ -42,7 +64,7 @@
   "A list of all of the reader macro characters and their
    corresponding values.")
 
-(defun parse-trimmed-real-number (string radix)
+(deftrimmer parse-trimmed-real-number parse-real-number (string radix)
   "Parse a real number from a trimmed string. Handle all of the
    possible reader macros as well as the minus sign."
   (case (char string 0)
@@ -60,7 +82,7 @@
 			  (format nil "Invalid reader macro #~:C" (char string 1)))))))
     (otherwise (parse-trimmed-positive-real-number string radix))))
 
-(defun parse-trimmed-positive-real-number (string radix)
+(deftrimmer parse-trimmed-positive-real-number parse-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
   (macrolet ((err (reason) `(invalid string ,reason)))
     (let ((first-char (char string 0))
@@ -125,14 +147,6 @@
                      (.-pos
                       (apply #'make-float (split-and-parse string radix .-pos)))
                      (:else (values (parse-integer string :radix radix))))))))))
-
-(defparameter *whitespace-characters*
-  '(#\space #\tab #\return #\newline)
-  "A list of whitespace characters.")
-
-(defun whitespace-p (x)
-  "Is the given character a white space character?"
-  (find x *whitespace-characters*))
 
 (defparameter *exponent-markers*
   '(#\D #\E #\L #\F #\S)
@@ -235,19 +249,3 @@
        (/ (* exp (value frac))
 	  (expt (float radix base)
 		(num-digits frac))))))
-
-(defmacro deftrimmer (trimmer regular)
-  "Define a function, TRIMMER, which will take in a string and will
-   also accept several keyword arguments such as start, end, and
-   radix. It will then call REGULAR with a trimmed version of the
-   string and the radix."
-  `(defun ,trimmer (string &key (start 0) end (radix 10)
-			     ((:float-format *read-default-float-format*)
-			      *read-default-float-format*))
-     ,(format nil "Call ~A with the string after trimming it." regular)
-     (,regular (string-trim *whitespace-characters* (subseq string start end))
-	       radix)))
-
-(deftrimmer parse-number parse-trimmed-number)
-(deftrimmer parse-real-number parse-trimmed-real-number)
-(deftrimmer parse-positive-real-number parse-trimmed-positive-real-number)
