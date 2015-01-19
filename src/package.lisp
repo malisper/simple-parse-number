@@ -4,4 +4,5 @@
   (:export :invalid-number
            :invalid-number-value
 	   :invalid-number-reason
-	   :parse-number))
+	   :parse-number
+	   :parse-real-number))
