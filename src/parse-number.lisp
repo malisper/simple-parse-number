@@ -84,34 +84,34 @@
 
 (deftrimmer parse-trimmed-positive-real-number parse-positive-real-number (string radix)
   "Parse a positive real number from a string that has been trimmed."
-  (macrolet ((err (reason) `(invalid string ,reason)))
+  (macrolet ((inv (reason) `(invalid string ,reason)))
     (let ((first-char (char string 0))
           (last-char  (char string (- (length string) 1))))
       (cond ((eql (length string) 0)
-             (err "Cannot parse empty string"))
+             (inv "Cannot parse empty string"))
             ((string= string ".")
-             (err "Only the dot is present"))
+             (inv "Only the dot is present"))
             ((some (lambda (x) (not (valid-p x radix))) string)
-             (err (format nil "Invalid characters: ~{~:C~^ ~}"
+             (inv (format nil "Invalid characters: ~{~:C~^ ~}"
                           (remove-duplicates
                            (remove-if (lambda (c)
                                         (valid-p c radix))
                                       (coerce string 'list))))))
             ((invalid-positive-real-number-first-char first-char radix)
-             (err (format nil "Invalid use of ~A at the start ~
+             (inv (format nil "Invalid use of ~A at the start ~
                                of a number" first-char)))
             ((invalid-last-char last-char radix)
-             (err (format nil "Invalid use of ~A at the end ~
+             (inv (format nil "Invalid use of ~A at the end ~
                                of a number" last-char)))
             ((>= (count #\/ string) 2)
-             (err "Multiple /'s in number"))
+             (inv "Multiple /'s in number"))
             ((>= (count #\. string) 2)
-             (err "Multiple .'s in number"))
+             (inv "Multiple .'s in number"))
             ((>= (count-if (lambda (c)
 			     (exponent-marker-p c radix))
 			   string)
                  2)
-             (err "Multiple exponent markers in number"))
+             (inv "Multiple exponent markers in number"))
             (:else
              (let ((.-pos (position #\. string))
                    (/-pos (position #\/ string))
@@ -119,17 +119,17 @@
 					   (exponent-marker-p c radix))
 					 string)))
                (cond ((and (/= radix 10) (or exp-pos .-pos))
-                      (err (format nil
+                      (inv (format nil
                                    "Only decimal numbers can contain ~:[~
                                     an exponent-marker~; a decimal point~]"
                                    .-pos)))
                      ((and /-pos .-pos)
-                      (err "Both . and / cannot be used at the same time"))
+                      (inv "Both . and / cannot be used at the same time"))
                      ((and /-pos exp-pos)
-                      (err "Both an exponent-marker and / cannot be used at the same time."))
+                      (inv "Both an exponent-marker and / cannot be used at the same time."))
                      ((and .-pos exp-pos)
                       (if (< exp-pos .-pos)
-                          (err "Exponent-markers must come after a dot.")
+                          (inv "Exponent-markers must come after a dot.")
                           (apply #'make-exp-float
                                  radix
                                  (char string exp-pos)
